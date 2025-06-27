@@ -4,8 +4,8 @@ pipeline {
         AWS_REGION = 'ap-south-1'
         S3_BUCKET = 's3bucket-moso-interior'
         CF_DIST_ID = 'EN3AB08UJKYZ3'
-        AWS_ACCESS_KEY = credentials('AWS_ACCESS_KEY_ID')
-        AWS_SECRET_KEY = credentials('AWS_SECRET_ACCESS_KEY')
+        AWS_ACCESS_KEY_ID = credentials('AWS_ACCESS_KEY_ID')
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
     }
     stages {
         stage('Checkout Code') {
@@ -16,7 +16,7 @@ pipeline {
                     extensions: [],
                     userRemoteConfigs: [[
                         url: 'https://github.com/PrabhaAjit/my-static-website.git',
-                        credentialsId: ''
+                        credentialsId: '' // Add credential ID if private repo
                     ]]
                 ])
             }
@@ -25,27 +25,22 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY"
-                        export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_KEY"
-                        export AWS_DEFAULT_REGION="$AWS_REGION"
-
-                        # Verify credentials
-                        aws sts get-caller-identity
-
-                        # Remove problematic files
+                        # Clean up unwanted files
                         find . -name "*:Zone.Identifier" -delete
                         rm -f .*.swp || true
 
-                        # Sync without ACL
+                        # Sync to S3
                         aws s3 sync . s3://$S3_BUCKET/ \\
                             --exclude ".git/*" \\
                             --exclude "Jenkinsfile" \\
-                            --delete
+                            --delete \\
+                            --region $AWS_REGION
 
-                        # Invalidate CloudFront
+                        # Invalidate CloudFront cache
                         aws cloudfront create-invalidation \\
                             --distribution-id $CF_DIST_ID \\
-                            --paths "/*"
+                            --paths "/*" \\
+                            --region $AWS_REGION
                     '''
                 }
             }
@@ -53,9 +48,8 @@ pipeline {
     }
     post {
         always {
-        echo 'Post-build steps skipped for now.'
-//            cleanWs()
+            echo 'Deployment process completed'
+            // cleanWs() // Uncomment to clean workspace
         }
     }
-
-
+}
